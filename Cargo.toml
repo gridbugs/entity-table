@@ -1,5 +1,5 @@
 [package]
-name = "component_table"
+name = "entity_table"
 description = "Data structure for associating data with entities in an Entity Component System"
 version = "0.1.0"
 authors = ["Stephen Sherratt <stephen@sherra.tt>"]
