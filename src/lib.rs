@@ -297,7 +297,7 @@ impl<'a, T> Iterator for ComponentTableIterMut<'a, T> {
 }
 
 #[macro_export]
-macro_rules! ecs_components {
+macro_rules! declare_entity_module {
     { $module_name:ident { $($component_name:ident: $component_type:ty,)* } } => {
         mod $module_name {
             #[allow(unused_imports)]
