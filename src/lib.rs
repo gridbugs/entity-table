@@ -429,8 +429,8 @@ mod test {
     }
 
     #[test]
-    fn ecs_components_macro() {
-        ecs_components! {
+    fn declare_entity_module_macro() {
+        declare_entity_module! {
             components {
                 coord: (i32, i32),
                 name: String,
@@ -457,7 +457,7 @@ mod test {
 
     #[test]
     fn serde() {
-        ecs_components! {
+        declare_entity_module! {
             components {
                 coord: (i32, i32),
                 name: String,
