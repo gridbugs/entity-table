@@ -1,6 +1,4 @@
-#[cfg(feature = "serialize")]
-pub use serde;
-#[cfg(feature = "serialize")]
+pub use serde; // public so it can be referenced in macro body
 use serde::{Deserialize, Serialize};
 use std::mem;
 use std::slice;
@@ -8,8 +6,7 @@ use std::slice;
 type Id = u32;
 type Index = u32;
 
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Entity {
     id: Id,
     index: Index,
@@ -20,7 +17,6 @@ struct IndexToId {
     vec: Vec<Option<Id>>,
 }
 
-#[cfg(feature = "serialize")]
 impl IndexToId {
     fn to_entities(&self) -> Vec<Entity> {
         self.vec
@@ -49,22 +45,19 @@ impl IndexToId {
     }
 }
 
-#[cfg(feature = "serialize")]
 impl Serialize for IndexToId {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         self.to_entities().serialize(s)
     }
 }
 
-#[cfg(feature = "serialize")]
 impl<'a> Deserialize<'a> for IndexToId {
     fn deserialize<D: serde::Deserializer<'a>>(d: D) -> Result<Self, D::Error> {
         Deserialize::deserialize(d).map(Self::from_entities)
     }
 }
 
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct EntityAllocator {
     next_id: Id,
     next_index: Index,
@@ -101,15 +94,13 @@ impl EntityAllocator {
     }
 }
 
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ComponentTableEntry<T> {
     data: T,
     entity: Entity,
 }
 
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ComponentTableEntries<T> {
     vec: Vec<ComponentTableEntry<T>>,
 }
@@ -156,14 +147,12 @@ impl<T> Default for ComponentTable<T> {
     }
 }
 
-#[cfg(feature = "serialize")]
 impl<T: Serialize> Serialize for ComponentTable<T> {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         self.entries.serialize(s)
     }
 }
 
-#[cfg(feature = "serialize")]
 impl<'a, T: Deserialize<'a>> Deserialize<'a> for ComponentTable<T> {
     fn deserialize<D: serde::Deserializer<'a>>(d: D) -> Result<Self, D::Error> {
         Deserialize::deserialize(d).map(ComponentTableEntries::into_component_table)
@@ -314,8 +303,7 @@ macro_rules! ecs_components {
             #[allow(unused_imports)]
             use super::*;
 
-            #[cfg_attr(feature = "serialize", derive($crate::serde::Serialize, $crate::serde::Deserialize))]
-            #[derive(Debug, Clone)]
+            #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
             pub struct Components {
                 $(pub $component_name: $crate::ComponentTable<$component_type>,)*
             }
@@ -328,8 +316,7 @@ macro_rules! ecs_components {
                 }
             }
 
-            #[cfg_attr(feature = "serialize", derive($crate::serde::Serialize, $crate::serde::Deserialize))]
-            #[derive(Debug, Clone)]
+            #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
             pub struct EntityData {
                 $(pub $component_name: Option<$component_type>,)*
             }
@@ -468,7 +455,6 @@ mod test {
         assert_eq!(components.name.get(e2).unwrap(), "Foo");
     }
 
-    #[cfg(feature = "serialize")]
     #[test]
     fn serde() {
         ecs_components! {
