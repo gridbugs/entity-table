@@ -1,13 +1,13 @@
 [package]
 name = "entity_table"
 description = "Data structure for associating data with entities in an Entity Component System"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Stephen Sherratt <stephen@sherra.tt>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/stevebob/component-table.git"
-repository = "https://github.com/stevebob/component-table.git"
-documentation = "https://docs.rs/component_table"
+homepage = "https://github.com/stevebob/entity-table.git"
+repository = "https://github.com/stevebob/entity-table.git"
+documentation = "https://docs.rs/entity_table"
 edition = "2018"
 
 [features]
