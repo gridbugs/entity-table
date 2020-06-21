@@ -1,4 +1,6 @@
+#[cfg(feature = "serialize")]
 pub use serde; // public so it can be referenced in macro body
+#[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use std::mem;
 use std::slice;
@@ -6,7 +8,8 @@ use std::slice;
 type Id = u32;
 type Index = u32;
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Entity {
     id: Id,
     index: Index,
@@ -17,6 +20,7 @@ struct IndexToId {
     vec: Vec<Option<Id>>,
 }
 
+#[cfg(feature = "serialize")]
 impl IndexToId {
     fn to_entities(&self) -> Vec<Entity> {
         self.vec
@@ -45,19 +49,22 @@ impl IndexToId {
     }
 }
 
+#[cfg(feature = "serialize")]
 impl Serialize for IndexToId {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         self.to_entities().serialize(s)
     }
 }
 
+#[cfg(feature = "serialize")]
 impl<'a> Deserialize<'a> for IndexToId {
     fn deserialize<D: serde::Deserializer<'a>>(d: D) -> Result<Self, D::Error> {
         Deserialize::deserialize(d).map(Self::from_entities)
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[derive(Debug, Default)]
 pub struct EntityAllocator {
     next_id: Id,
     next_index: Index,
@@ -94,13 +101,15 @@ impl EntityAllocator {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone)]
 pub struct ComponentTableEntry<T> {
     data: T,
     entity: Entity,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone)]
 pub struct ComponentTableEntries<T> {
     vec: Vec<ComponentTableEntry<T>>,
 }
@@ -147,12 +156,14 @@ impl<T> Default for ComponentTable<T> {
     }
 }
 
+#[cfg(feature = "serialize")]
 impl<T: Serialize> Serialize for ComponentTable<T> {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         self.entries.serialize(s)
     }
 }
 
+#[cfg(feature = "serialize")]
 impl<'a, T: Deserialize<'a>> Deserialize<'a> for ComponentTable<T> {
     fn deserialize<D: serde::Deserializer<'a>>(d: D) -> Result<Self, D::Error> {
         Deserialize::deserialize(d).map(ComponentTableEntries::into_component_table)
@@ -296,6 +307,69 @@ impl<'a, T> Iterator for ComponentTableIterMut<'a, T> {
     }
 }
 
+#[cfg(not(feature = "serialize"))]
+#[macro_export]
+macro_rules! declare_entity_module {
+    { $module_name:ident { $($component_name:ident: $component_type:ty,)* } } => {
+        mod $module_name {
+            #[allow(unused_imports)]
+            use super::*;
+
+            #[derive(Debug, Clone)]
+            pub struct Components {
+                $(pub $component_name: $crate::ComponentTable<$component_type>,)*
+            }
+
+            impl Default for Components {
+                fn default() -> Self {
+                    Self {
+                        $($component_name: Default::default(),)*
+                    }
+                }
+            }
+
+            #[derive(Debug, Clone)]
+            pub struct EntityData {
+                $(pub $component_name: Option<$component_type>,)*
+            }
+
+            impl Default for EntityData {
+                fn default() -> Self {
+                    Self {
+                        $($component_name: None,)*
+                    }
+                }
+            }
+
+            impl Components {
+                #[allow(unused)]
+                pub fn remove_entity(&mut self, entity: $crate::Entity) {
+                    $(self.$component_name.remove(entity);)*
+                }
+                #[allow(unused)]
+                pub fn clone_entity_data(&self, entity: $crate::Entity) -> EntityData {
+                    EntityData {
+                        $($component_name: self.$component_name.get(entity).cloned(),)*
+                    }
+                }
+                #[allow(unused)]
+                pub fn remove_entity_data(&mut self, entity: $crate::Entity) -> EntityData {
+                    EntityData {
+                        $($component_name: self.$component_name.remove(entity),)*
+                    }
+                }
+                #[allow(unused)]
+                pub fn insert_entity_data(&mut self, entity: $crate::Entity, entity_data: EntityData) {
+                    $(if let Some(field) = entity_data.$component_name {
+                        self.$component_name.insert(entity, field);
+                    })*
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "serialize")]
 #[macro_export]
 macro_rules! declare_entity_module {
     { $module_name:ident { $($component_name:ident: $component_type:ty,)* } } => {
@@ -455,6 +529,7 @@ mod test {
         assert_eq!(components.name.get(e2).unwrap(), "Foo");
     }
 
+    #[cfg(feature = "serialize")]
     #[test]
     fn serde() {
         declare_entity_module! {

@@ -10,3 +10,4 @@ jobs:
   fast_finish: true
 script:
   - cargo test
+  - cargo test --features serialize
