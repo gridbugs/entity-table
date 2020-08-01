@@ -134,6 +134,12 @@ impl EntityAllocator {
             self.free_indices.push(entity.index);
         }
     }
+    pub fn clear(&mut self) {
+        self.next_id = 0;
+        self.next_index = 0;
+        self.index_to_id.vec.clear();
+        self.free_indices.clear();
+    }
 }
 
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -177,6 +183,9 @@ impl<T> ComponentTableEntries<T> {
             entity_index_to_entry_index,
         }
     }
+    pub fn clear(&mut self) {
+        self.vec.clear();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +215,10 @@ impl<'a, T: Deserialize<'a>> Deserialize<'a> for ComponentTable<T> {
 }
 
 impl<T> ComponentTable<T> {
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.entity_index_to_entry_index.clear();
+    }
     pub fn is_empty(&self) -> bool {
         self.entries.vec.is_empty()
     }
@@ -378,6 +391,10 @@ macro_rules! declare_entity_module {
 
             impl Components {
                 #[allow(unused)]
+                pub fn clear(&mut self) {
+                    $(self.$component_name.clear();)*
+                }
+                #[allow(unused)]
                 pub fn remove_entity(&mut self, entity: $crate::Entity) {
                     $(self.$component_name.remove(entity);)*
                 }
@@ -397,6 +414,14 @@ macro_rules! declare_entity_module {
                 pub fn insert_entity_data(&mut self, entity: $crate::Entity, entity_data: EntityData) {
                     $(if let Some(field) = entity_data.$component_name {
                         self.$component_name.insert(entity, field);
+                    })*
+                }
+                #[allow(unused)]
+                pub fn update_entity_data(&mut self, entity: $crate::Entity, entity_data: EntityData) {
+                    $(if let Some(field) = entity_data.$component_name {
+                        self.$component_name.insert(entity, field);
+                    } else {
+                        self.$component_name.remove(entity);
                     })*
                 }
             }
@@ -440,6 +465,10 @@ macro_rules! declare_entity_module {
 
             impl Components {
                 #[allow(unused)]
+                pub fn clear(&mut self) {
+                    $(self.$component_name.clear();)*
+                }
+                #[allow(unused)]
                 pub fn remove_entity(&mut self, entity: $crate::Entity) {
                     $(self.$component_name.remove(entity);)*
                 }
@@ -459,6 +488,14 @@ macro_rules! declare_entity_module {
                 pub fn insert_entity_data(&mut self, entity: $crate::Entity, entity_data: EntityData) {
                     $(if let Some(field) = entity_data.$component_name {
                         self.$component_name.insert(entity, field);
+                    })*
+                }
+                #[allow(unused)]
+                pub fn update_entity_data(&mut self, entity: $crate::Entity, entity_data: EntityData) {
+                    $(if let Some(field) = entity_data.$component_name {
+                        self.$component_name.insert(entity, field);
+                    } else {
+                        self.$component_name.remove(entity);
                     })*
                 }
             }
