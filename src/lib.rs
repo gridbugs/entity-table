@@ -120,7 +120,7 @@ impl EntityAllocator {
             self.index_to_id.vec.resize(index as usize, None);
             self.index_to_id.vec.push(Some(id));
         } else {
-            assert_eq!(self.index_to_id.vec[index as usize], None);
+            debug_assert_eq!(self.index_to_id.vec[index as usize], None);
             self.index_to_id.vec[index as usize] = Some(id);
         }
         Entity { id, index }
@@ -221,7 +221,7 @@ impl<T> ComponentTable<T> {
             .get_mut(entity.index as usize)
         {
             if let Some(entry_index) = maybe_entry_index {
-                assert!((*entry_index as usize) < self.entries.vec.len());
+                debug_assert!((*entry_index as usize) < self.entries.vec.len());
                 let entry = &mut self.entries.vec[*entry_index as usize];
                 if entry.entity == entity {
                     Some(mem::replace(&mut entry.data, data))
@@ -247,7 +247,7 @@ impl<T> ComponentTable<T> {
     pub fn contains(&self, entity: Entity) -> bool {
         if let Some(Some(entry_index)) = self.entity_index_to_entry_index.get(entity.index as usize)
         {
-            assert!((*entry_index as usize) < self.entries.vec.len());
+            debug_assert!((*entry_index as usize) < self.entries.vec.len());
             self.entries.vec[*entry_index as usize].entity.id == entity.id
         } else {
             false
@@ -259,7 +259,7 @@ impl<T> ComponentTable<T> {
             .get_mut(entity.index as usize)
         {
             if let Some(entry_index) = maybe_entry_index.take() {
-                assert!((entry_index as usize) < self.entries.vec.len());
+                debug_assert!((entry_index as usize) < self.entries.vec.len());
                 if entry_index as usize == self.entries.vec.len() - 1 {
                     self.entries.vec.pop().map(|entry| entry.data)
                 } else {
@@ -278,7 +278,7 @@ impl<T> ComponentTable<T> {
     pub fn get(&self, entity: Entity) -> Option<&T> {
         if let Some(Some(entry_index)) = self.entity_index_to_entry_index.get(entity.index as usize)
         {
-            assert!((*entry_index as usize) < self.entries.vec.len());
+            debug_assert!((*entry_index as usize) < self.entries.vec.len());
             let entry = &self.entries.vec[*entry_index as usize];
             if entry.entity.id == entity.id {
                 Some(&entry.data)
@@ -292,7 +292,7 @@ impl<T> ComponentTable<T> {
     pub fn get_mut(&mut self, entity: Entity) -> Option<&mut T> {
         if let Some(Some(entry_index)) = self.entity_index_to_entry_index.get(entity.index as usize)
         {
-            assert!((*entry_index as usize) < self.entries.vec.len());
+            debug_assert!((*entry_index as usize) < self.entries.vec.len());
             let entry = &mut self.entries.vec[*entry_index as usize];
             if entry.entity.id == entity.id {
                 Some(&mut entry.data)
