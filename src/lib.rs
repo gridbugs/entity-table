@@ -21,24 +21,59 @@ struct IndexToId {
 }
 
 #[cfg(feature = "serialize")]
+#[derive(Serialize, Deserialize)]
+struct IndexToIdSerialize {
+    entities: Vec<Entity>,
+    // In the typical use case there will be a large number of entities whose id and index fields
+    // will match, beginning with the entity whose id and index are 0. This is because in most
+    // games there is a large amount of static entities which make up the level that get allocated
+    // before dynamic entities.
+    num_matching_entities: u32,
+}
+
+#[cfg(feature = "serialize")]
 impl IndexToId {
-    fn to_entities(&self) -> Vec<Entity> {
-        self.vec
+    fn to_serialize(&self) -> IndexToIdSerialize {
+        let entities = self
+            .vec
             .iter()
             .enumerate()
+            .skip_while(|&(index, maybe_id)| maybe_id.map(|id| id == index as u32).unwrap_or(false))
             .filter_map(|(index, maybe_id)| {
                 maybe_id.map(|id| Entity {
                     id,
                     index: index as u32,
                 })
             })
-            .collect()
+            .collect();
+        let num_matching_entities = self
+            .vec
+            .iter()
+            .enumerate()
+            .take_while(|&(index, maybe_id)| maybe_id.map(|id| id == index as u32).unwrap_or(false))
+            .count() as u32;
+        IndexToIdSerialize {
+            entities,
+            num_matching_entities,
+        }
     }
-    fn from_entities(entities: Vec<Entity>) -> Self {
-        let vec = if let Some(max_index) = entities.iter().map(|e| e.index).max() {
-            let mut vec = Vec::with_capacity(max_index as usize + 1);
-            vec.resize(max_index as usize + 1, None);
-            for entity in &entities {
+    fn from_serialize(
+        IndexToIdSerialize {
+            entities,
+            num_matching_entities,
+        }: IndexToIdSerialize,
+    ) -> Self {
+        let vec = if let Some(max_index) = entities
+            .iter()
+            .map(|e| e.index)
+            .max()
+            .or(num_matching_entities.checked_sub(1))
+        {
+            let mut vec = vec![None; max_index as usize + 1];
+            for id_and_index in 0..num_matching_entities {
+                vec[id_and_index as usize] = Some(id_and_index);
+            }
+            for entity in entities {
                 vec[entity.index as usize] = Some(entity.id);
             }
             vec
@@ -52,14 +87,14 @@ impl IndexToId {
 #[cfg(feature = "serialize")]
 impl Serialize for IndexToId {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        self.to_entities().serialize(s)
+        self.to_serialize().serialize(s)
     }
 }
 
 #[cfg(feature = "serialize")]
 impl<'a> Deserialize<'a> for IndexToId {
     fn deserialize<D: serde::Deserializer<'a>>(d: D) -> Result<Self, D::Error> {
-        Deserialize::deserialize(d).map(Self::from_entities)
+        Deserialize::deserialize(d).map(Self::from_serialize)
     }
 }
 
