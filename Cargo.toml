@@ -1,7 +1,7 @@
 [package]
 name = "entity_table"
 description = "Data structure for associating data with entities in an Entity Component System"
-version = "0.2.3"
+version = "0.2.4"
 authors = ["Stephen Sherratt <stephen@sherra.tt>"]
 license = "MIT"
 readme = "README.md"
