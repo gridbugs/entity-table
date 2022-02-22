@@ -1,5 +1,5 @@
 #[cfg(feature = "serialize")]
-pub use serde; // public so it can be referenced in macro body
+pub use serde; // Re-export serde so it can be referenced in macro body
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use std::mem;
@@ -357,79 +357,38 @@ impl<'a, T> Iterator for ComponentTableIterMut<'a, T> {
 
 #[cfg(not(feature = "serialize"))]
 #[macro_export]
-macro_rules! declare_entity_module {
-    { $module_name:ident { $($component_name:ident: $component_type:ty,)* } } => {
-        mod $module_name {
-            #[allow(unused_imports)]
-            use super::*;
+macro_rules! declare_entity_module_types {
+    { $($component_name:ident: $component_type:ty,)* } => {
 
-            #[derive(Debug, Clone)]
-            pub struct Components {
-                $(pub $component_name: $crate::ComponentTable<$component_type>,)*
-            }
+        #[derive(Debug, Clone)]
+        pub struct Components {
+            $(pub $component_name: $crate::ComponentTable<$component_type>,)*
+        }
 
-            impl Default for Components {
-                fn default() -> Self {
-                    Self {
-                        $($component_name: Default::default(),)*
-                    }
-                }
-            }
-
-            #[derive(Debug, Clone)]
-            pub struct EntityData {
-                $(pub $component_name: Option<$component_type>,)*
-            }
-
-            impl Default for EntityData {
-                fn default() -> Self {
-                    Self {
-                        $($component_name: None,)*
-                    }
-                }
-            }
-
-            impl Components {
-                #[allow(unused)]
-                pub fn clear(&mut self) {
-                    $(self.$component_name.clear();)*
-                }
-                #[allow(unused)]
-                pub fn remove_entity(&mut self, entity: $crate::Entity) {
-                    $(self.$component_name.remove(entity);)*
-                }
-                #[allow(unused)]
-                pub fn clone_entity_data(&self, entity: $crate::Entity) -> EntityData {
-                    EntityData {
-                        $($component_name: self.$component_name.get(entity).cloned(),)*
-                    }
-                }
-                #[allow(unused)]
-                pub fn remove_entity_data(&mut self, entity: $crate::Entity) -> EntityData {
-                    EntityData {
-                        $($component_name: self.$component_name.remove(entity),)*
-                    }
-                }
-                #[allow(unused)]
-                pub fn insert_entity_data(&mut self, entity: $crate::Entity, entity_data: EntityData) {
-                    $(if let Some(field) = entity_data.$component_name {
-                        self.$component_name.insert(entity, field);
-                    })*
-                }
-                #[allow(unused)]
-                pub fn update_entity_data(&mut self, entity: $crate::Entity, entity_data: EntityData) {
-                    $(if let Some(field) = entity_data.$component_name {
-                        self.$component_name.insert(entity, field);
-                    } else {
-                        self.$component_name.remove(entity);
-                    })*
-                }
-            }
+        #[derive(Debug, Clone)]
+        pub struct EntityData {
+            $(pub $component_name: Option<$component_type>,)*
         }
     }
 }
 
 #[cfg(feature = "serialize")]
+#[macro_export]
+macro_rules! declare_entity_module_types {
+    { $($component_name:ident: $component_type:ty,)* } => {
+
+        #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
+        pub struct Components {
+            $(pub $component_name: $crate::ComponentTable<$component_type>,)*
+        }
+
+        #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
+        pub struct EntityData {
+            $(pub $component_name: Option<$component_type>,)*
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! declare_entity_module {
     { $module_name:ident { $($component_name:ident: $component_type:ty,)* } } => {
@@ -437,9 +396,8 @@ macro_rules! declare_entity_module {
             #[allow(unused_imports)]
             use super::*;
 
-            #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
-            pub struct Components {
-                $(pub $component_name: $crate::ComponentTable<$component_type>,)*
+            $crate::declare_entity_module_types! {
+                $($component_name: $component_type,)*
             }
 
             impl Default for Components {
@@ -448,11 +406,6 @@ macro_rules! declare_entity_module {
                         $($component_name: Default::default(),)*
                     }
                 }
-            }
-
-            #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
-            pub struct EntityData {
-                $(pub $component_name: Option<$component_type>,)*
             }
 
             impl Default for EntityData {
