@@ -365,7 +365,7 @@ macro_rules! declare_entity_module_types {
             $(pub $component_name: $crate::ComponentTable<$component_type>,)*
         }
 
-        #[derive(Debug, Clone)]
+        #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct EntityData {
             $(pub $component_name: Option<$component_type>,)*
         }
@@ -382,9 +382,31 @@ macro_rules! declare_entity_module_types {
             $(pub $component_name: $crate::ComponentTable<$component_type>,)*
         }
 
-        #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
+        #[derive(Debug, Clone, PartialEq, Eq,  $crate::serde::Serialize, $crate::serde::Deserialize)]
         pub struct EntityData {
             $(pub $component_name: Option<$component_type>,)*
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! entity_data_field_pun {
+    { $field:ident : $value:expr } => { Some($value) };
+    { $field:ident } => { Some($field) };
+}
+
+#[macro_export]
+macro_rules! entity_data {
+    { $($field:ident $(: $value:expr)?,)* .. $default:expr } => {
+        EntityData {
+            $($field : entity_data_field_pun!($field $(: $value)?),)*
+            ..$default
+        }
+    };
+    { $($field:ident $(: $value:expr)?),* $(,)? } => {
+        entity_data! {
+            $($field $(: $value)?,)*
+            ..Default::default()
         }
     }
 }
@@ -393,6 +415,7 @@ macro_rules! declare_entity_module_types {
 macro_rules! declare_entity_module {
     { $module_name:ident { $($component_name:ident: $component_type:ty,)* } } => {
         mod $module_name {
+
             #[allow(unused_imports)]
             use super::*;
 
@@ -622,5 +645,22 @@ mod test {
         );
         assert!(!entity_allocator.exists(e0));
         assert!(!entity_allocator.exists(e1));
+    }
+
+    #[test]
+    fn entity_data() {
+        declare_entity_module! {
+            components {
+                coord: (i32, i32),
+                name: String,
+            }
+        }
+        use components::EntityData;
+        let coord = (12, 1);
+        let no_default = entity_data! { coord };
+        let with_default = entity_data! { coord, ..Default::default() };
+        let non_punned = entity_data! { coord: (12, 1) };
+        assert_eq!(no_default, with_default);
+        assert_eq!(with_default, non_punned);
     }
 }
