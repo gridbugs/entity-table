@@ -369,6 +369,11 @@ macro_rules! declare_entity_module_types {
         pub struct EntityData {
             $(pub $component_name: Option<$component_type>,)*
         }
+
+        #[derive(Debug, Clone)]
+        pub struct EntityUpdate {
+            $(pub $component_name: Option<Option<$component_type>>,)*
+        }
     }
 }
 
@@ -385,6 +390,11 @@ macro_rules! declare_entity_module_types {
         #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
         pub struct EntityData {
             $(pub $component_name: Option<$component_type>,)*
+        }
+
+        #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
+        pub struct EntityUpdate {
+            $(pub $component_name: Option<Option<$component_type>>,)*
         }
     }
 }
@@ -412,6 +422,28 @@ macro_rules! entity_data {
 }
 
 #[macro_export]
+macro_rules! entity_update_field_pun {
+    { $field:ident : $value:expr } => { Some($value) };
+    { $field:ident } => { Some($field) };
+}
+
+#[macro_export]
+macro_rules! entity_update {
+    { $($field:ident $(: $value:expr)?,)* .. $default:expr } => {
+        EntityUpdate {
+            $($field : $crate::entity_update_field_pun!($field $(: $value)?),)*
+            ..$default
+        }
+    };
+    { $($field:ident $(: $value:expr)?),* $(,)? } => {
+        $crate::entity_update! {
+            $($field $(: $value)?,)*
+            ..Default::default()
+        }
+    }
+}
+
+#[macro_export]
 macro_rules! declare_entity_module {
     { $module_name:ident { $($component_name:ident: $component_type:ty,)* } } => {
         mod $module_name {
@@ -432,6 +464,14 @@ macro_rules! declare_entity_module {
             }
 
             impl Default for EntityData {
+                fn default() -> Self {
+                    Self {
+                        $($component_name: None,)*
+                    }
+                }
+            }
+
+            impl Default for EntityUpdate {
                 fn default() -> Self {
                     Self {
                         $($component_name: None,)*
@@ -472,6 +512,14 @@ macro_rules! declare_entity_module {
                         self.$component_name.insert(entity, field);
                     } else {
                         self.$component_name.remove(entity);
+                    })*
+                }
+                #[allow(unused)]
+                pub fn apply_entity_update(&mut self, entity: $crate::Entity, entity_update: EntityUpdate) {
+                    $(match entity_update.$component_name {
+                        Some(Some(value)) => { self.$component_name.insert(entity, value); }
+                        Some(None) => { self.$component_name.remove(entity); }
+                        None => (),
                     })*
                 }
             }
@@ -662,5 +710,40 @@ mod test {
         let non_punned = entity_data! { coord: (12, 1) };
         assert_eq!(no_default.coord, with_default.coord);
         assert_eq!(with_default.coord, non_punned.coord);
+    }
+
+    #[test]
+    fn entity_update() {
+        declare_entity_module! {
+            components {
+                coord: (i32, i32),
+                name: String,
+                solid: (),
+                age: u8,
+            }
+        }
+        use components::{Components, EntityData, EntityUpdate};
+        let mut entity_allocator = EntityAllocator::default();
+        let entity = entity_allocator.alloc();
+        let mut components = Components::default();
+        components.insert_entity_data(
+            entity,
+            entity_data! {
+                coord: (1, 2),
+                name: "bar".to_string(),
+            },
+        );
+        let name = Some("foo".to_string());
+        let update = entity_update! {
+            name,
+            age: Some(30),
+            solid: None,
+        };
+        components.apply_entity_update(entity, update);
+        let data = components.remove_entity_data(entity);
+        assert_eq!(data.name.unwrap(), "foo");
+        assert_eq!(data.age.unwrap(), 30);
+        assert_eq!(data.solid, None);
+        assert_eq!(data.coord.unwrap(), (1, 2));
     }
 }
