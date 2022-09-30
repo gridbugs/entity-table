@@ -399,12 +399,12 @@ macro_rules! entity_data_field_pun {
 macro_rules! entity_data {
     { $($field:ident $(: $value:expr)?,)* .. $default:expr } => {
         EntityData {
-            $($field : entity_data_field_pun!($field $(: $value)?),)*
+            $($field : $crate::entity_data_field_pun!($field $(: $value)?),)*
             ..$default
         }
     };
     { $($field:ident $(: $value:expr)?),* $(,)? } => {
-        entity_data! {
+        $crate::entity_data! {
             $($field $(: $value)?,)*
             ..Default::default()
         }
