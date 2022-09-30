@@ -365,7 +365,7 @@ macro_rules! declare_entity_module_types {
             $(pub $component_name: $crate::ComponentTable<$component_type>,)*
         }
 
-        #[derive(Debug, Clone, PartialEq, Eq)]
+        #[derive(Debug, Clone)]
         pub struct EntityData {
             $(pub $component_name: Option<$component_type>,)*
         }
@@ -382,7 +382,7 @@ macro_rules! declare_entity_module_types {
             $(pub $component_name: $crate::ComponentTable<$component_type>,)*
         }
 
-        #[derive(Debug, Clone, PartialEq, Eq,  $crate::serde::Serialize, $crate::serde::Deserialize)]
+        #[derive(Debug, Clone, $crate::serde::Serialize, $crate::serde::Deserialize)]
         pub struct EntityData {
             $(pub $component_name: Option<$component_type>,)*
         }
@@ -660,7 +660,7 @@ mod test {
         let no_default = entity_data! { coord };
         let with_default = entity_data! { coord, ..Default::default() };
         let non_punned = entity_data! { coord: (12, 1) };
-        assert_eq!(no_default, with_default);
-        assert_eq!(with_default, non_punned);
+        assert_eq!(no_default.coord, with_default.coord);
+        assert_eq!(with_default.coord, non_punned.coord);
     }
 }
