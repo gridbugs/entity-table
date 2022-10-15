@@ -2,22 +2,74 @@
 pub use serde; // Re-export serde so it can be referenced in macro body
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
-use std::mem;
-use std::slice;
+use std::{iter, mem, slice};
 
 type Id = u32;
 type Index = u32;
 
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Entity {
     id: Id,
     index: Index,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct IndexToId {
     vec: Vec<Option<Id>>,
+}
+
+impl IndexToId {
+    fn new_with_capacity(capacity: usize) -> Self {
+        let mut vec = Vec::with_capacity(capacity);
+        vec.resize(capacity, None);
+        Self { vec }
+    }
+    fn insert(&mut self, Entity { id, index }: Entity) {
+        if index as usize >= self.vec.len() {
+            self.vec.resize(index as usize + 1, None);
+        }
+        self.vec[index as usize] = Some(id);
+    }
+    fn remove(&mut self, index: Index) {
+        if let Some(entry) = self.vec.get_mut(index as usize) {
+            *entry = None;
+        }
+    }
+    fn clear(&mut self) {
+        self.vec.clear();
+    }
+    fn contains(&self, entity: Entity) -> bool {
+        self.vec.get(entity.index as usize) == Some(&Some(entity.id))
+    }
+    fn entities(&self) -> Entities {
+        Entities {
+            iter: self.vec.iter().enumerate(),
+        }
+    }
+}
+
+pub struct Entities<'a> {
+    iter: iter::Enumerate<slice::Iter<'a, Option<Id>>>,
+}
+
+impl<'a> Iterator for Entities<'a> {
+    type Item = Entity;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some((index, maybe_id)) = self.iter.next() {
+                if let Some(id) = maybe_id {
+                    return Some(Entity {
+                        index: index as u32,
+                        id: *id,
+                    });
+                }
+            } else {
+                return None;
+            }
+        }
+    }
 }
 
 #[cfg(feature = "serialize")]
@@ -116,13 +168,8 @@ impl EntityAllocator {
             self.next_index += 1;
             index
         });
-        if index as usize >= self.index_to_id.vec.len() {
-            self.index_to_id.vec.resize(index as usize, None);
-            self.index_to_id.vec.push(Some(id));
-        } else {
-            debug_assert_eq!(self.index_to_id.vec[index as usize], None);
-            self.index_to_id.vec[index as usize] = Some(id);
-        }
+        let entity = Entity { id, index };
+        self.index_to_id.insert(entity);
         Entity { id, index }
     }
     pub fn exists(&self, entity: Entity) -> bool {
@@ -130,7 +177,7 @@ impl EntityAllocator {
     }
     pub fn free(&mut self, entity: Entity) {
         if self.exists(entity) {
-            self.index_to_id.vec[entity.index as usize] = None;
+            self.index_to_id.remove(entity.index);
             self.free_indices.push(entity.index);
         }
     }
@@ -164,23 +211,27 @@ impl<T> Default for ComponentTableEntries<T> {
 }
 
 impl<T> ComponentTableEntries<T> {
-    fn entity_index_to_entry_index(&self) -> Vec<Option<Index>> {
+    fn entity_index_tables(&self) -> (Vec<Option<Index>>, IndexToId) {
         if let Some(max_index) = self.vec.iter().map(|entry| entry.entity.index).max() {
             let mut vec = Vec::with_capacity(max_index as usize + 1);
             vec.resize(max_index as usize + 1, None);
+            let mut entity_index_to_entity_id =
+                IndexToId::new_with_capacity(max_index as usize + 1);
             for (index, entry) in self.vec.iter().enumerate() {
                 vec[entry.entity.index as usize] = Some(index as u32);
+                entity_index_to_entity_id.insert(entry.entity);
             }
-            vec
+            (vec, entity_index_to_entity_id)
         } else {
-            Vec::new()
+            (Vec::new(), Default::default())
         }
     }
     pub fn into_component_table(self) -> ComponentTable<T> {
-        let entity_index_to_entry_index = self.entity_index_to_entry_index();
+        let (entity_index_to_entry_index, entity_index_to_entity_id) = self.entity_index_tables();
         ComponentTable {
             entries: self,
             entity_index_to_entry_index,
+            entity_index_to_entity_id,
         }
     }
     pub fn clear(&mut self) {
@@ -192,6 +243,7 @@ impl<T> ComponentTableEntries<T> {
 pub struct ComponentTable<T> {
     entries: ComponentTableEntries<T>,
     entity_index_to_entry_index: Vec<Option<Index>>,
+    entity_index_to_entity_id: IndexToId,
 }
 
 impl<T> Default for ComponentTable<T> {
@@ -218,6 +270,7 @@ impl<T> ComponentTable<T> {
     pub fn clear(&mut self) {
         self.entries.clear();
         self.entity_index_to_entry_index.clear();
+        self.entity_index_to_entity_id.clear();
     }
     pub fn is_empty(&self) -> bool {
         self.entries.vec.is_empty()
@@ -237,23 +290,37 @@ impl<T> ComponentTable<T> {
                 debug_assert!((*entry_index as usize) < self.entries.vec.len());
                 let entry = &mut self.entries.vec[*entry_index as usize];
                 if entry.entity == entity {
+                    debug_assert!(self.entity_index_to_entity_id.contains(entity));
+                    // This entity already has a component in this table, so we return the previous
+                    // value associated with it and store the new value.
                     Some(mem::replace(&mut entry.data, data))
                 } else {
-                    entry.entity = entity;
+                    // This entity doesn't have a component in this table, but there is a stale
+                    // entry from a previous entity with the same index, which will be overwritten.
+                    entry.entity.id = entity.id;
                     entry.data = data;
+                    self.entity_index_to_entity_id.insert(entity);
                     None
                 }
             } else {
+                // This entity doesn't have a component in this table, but there is an entry in
+                // `self.entity_index_to_entry_index` for the entity, so push a new component and
+                // update `self.entity_index_to_entry_index` to point to the new component.
                 *maybe_entry_index = Some(self.entries.vec.len() as u32);
                 self.entries.vec.push(ComponentTableEntry { data, entity });
+                self.entity_index_to_entity_id.insert(entity);
                 None
             }
         } else {
+            // There is no corresponding entry in `self.entity_index_to_entry_index`. Push the
+            // component and add an entry in `self.entity_index_to_entry_index` that points to the
+            // new component.
             self.entity_index_to_entry_index
                 .resize(entity.index as usize, None);
             self.entity_index_to_entry_index
                 .push(Some(self.entries.vec.len() as u32));
             self.entries.vec.push(ComponentTableEntry { data, entity });
+            self.entity_index_to_entity_id.insert(entity);
             None
         }
     }
@@ -271,11 +338,16 @@ impl<T> ComponentTable<T> {
             .entity_index_to_entry_index
             .get_mut(entity.index as usize)
         {
+            self.entity_index_to_entity_id.remove(entity.index);
             if let Some(entry_index) = maybe_entry_index.take() {
                 debug_assert!((entry_index as usize) < self.entries.vec.len());
                 if entry_index as usize == self.entries.vec.len() - 1 {
+                    // Optimization when the component is the final one in the table, just pop it
+                    // and return it.
                     self.entries.vec.pop().map(|entry| entry.data)
                 } else {
+                    // Move the final entry in the table over the entry to remove, and then update
+                    // the index in `self.entity_index_to_entry_index` for the moved entity.
                     let entry = self.entries.vec.swap_remove(entry_index as usize);
                     let moved_index = self.entries.vec[entry_index as usize].entity.index;
                     self.entity_index_to_entry_index[moved_index as usize] = Some(entry_index);
@@ -285,6 +357,7 @@ impl<T> ComponentTable<T> {
                 None
             }
         } else {
+            debug_assert!(!self.entity_index_to_entity_id.contains(entity));
             None
         }
     }
@@ -326,8 +399,8 @@ impl<T> ComponentTable<T> {
             iter: self.entries.vec.iter_mut(),
         }
     }
-    pub fn entities(&self) -> impl '_ + Iterator<Item = Entity> {
-        self.iter().map(|(entity, _)| entity)
+    pub fn entities(&self) -> Entities {
+        self.entity_index_to_entity_id.entities()
     }
 }
 
@@ -745,5 +818,43 @@ mod test {
         assert_eq!(data.age.unwrap(), 30);
         assert_eq!(data.solid, None);
         assert_eq!(data.coord.unwrap(), (1, 2));
+    }
+
+    #[test]
+    fn entity_iterator() {
+        fn compare_entity_iterators(x: &ComponentTable<()>) {
+            use std::collections::HashSet;
+            let via_entities = x.entities().collect::<HashSet<_>>();
+            let via_iter = x.iter().map(|(entity, _)| entity).collect::<HashSet<_>>();
+            assert_eq!(via_entities, via_iter);
+        }
+        declare_entity_module! {
+            components {
+                x: (),
+            }
+        }
+        use components::Components;
+        let mut entity_allocator = EntityAllocator::default();
+        let mut components = Components::default();
+        compare_entity_iterators(&components.x);
+        let e0 = entity_allocator.alloc();
+        let e1 = entity_allocator.alloc();
+        let e2 = entity_allocator.alloc();
+        let e3 = entity_allocator.alloc();
+        let e4 = entity_allocator.alloc();
+        components.x.insert(e0, ());
+        components.x.insert(e1, ());
+        components.x.insert(e2, ());
+        components.x.insert(e3, ());
+        components.x.insert(e4, ());
+        compare_entity_iterators(&components.x);
+        components.x.remove(e2);
+        compare_entity_iterators(&components.x);
+        components.x.insert(e2, ());
+        compare_entity_iterators(&components.x);
+        entity_allocator.free(e3);
+        let e5 = entity_allocator.alloc();
+        components.x.insert(e5, ());
+        compare_entity_iterators(&components.x);
     }
 }
